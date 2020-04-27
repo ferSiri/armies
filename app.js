@@ -5,24 +5,16 @@ const cookieParser = require('cookie-parser');
 const session = require('express-session');
 const passport = require('passport');
 const LocalStrategy = require('passport-local').Strategy;
+require('dotenv').config();
 
 const db = require('./models/db');
 const models = require('./models/index').modelos;
 
 const app = express();
 
-const PORT = process.env.PORT || 5001;
+const PORT = process.env.PORT;
 
-db.sync({ force: false }).then(function () {
-    //BORRAR
-    /*  models.User.findOne({ where: { nombre: 'admin' } })
-         .then((user) => {
-             if (!user) {
-                 models.User.build({ nombre: 'admin', password: 'admin' }).save();
-             } else {
-                 console.log(user)
-             }
-         }) */
+db.sync({ force: true }).then(function () {
     app.listen(PORT, function () {
         console.log('listening at ' + PORT);
     });
@@ -30,9 +22,9 @@ db.sync({ force: false }).then(function () {
 
 app.use(bodyParser.urlencoded({ extended: true }));
 
-app.use(cookieParser('un re secreto'));
+app.use(cookieParser(process.env.SESSION_S));
 
-app.use(session({ secret: 'un re secreto', resave: false, saveUninitialized: false }));
+app.use(session({ secret: process.env.SESSION_S, resave: false, saveUninitialized: false }));
 
 app.use(passport.initialize());
 
@@ -51,7 +43,7 @@ passport.deserializeUser((user, done) => {
 });
 
 passport.use(new LocalStrategy((username, password, done) => {
-    models.User.findOne({ where: { nombre: username } })
+    models.User.findOne({ where: { email: username } })
         .then((user) => {
             if (user) {
 
@@ -76,13 +68,16 @@ app.use(express.static(path.join(__dirname, 'front')));
 app.use('/api', require('./routes/index'));
 
 app.post('/api/signup', (req, res) => {
-    models.User.create({
-        nombre: req.body.nombre,
-        password: req.body.password
-    }).then(() => {
-        console.log('usuario creado');
-        /* res.redirect('/') */
-    });
+    models.User.findOrCreate({ where: { email: req.body.email }, defaults: { nombre: req.body.nombre, email: req.body.email, password: req.body.password } })
+        .spread(function (user, created) {
+            if (!created) {
+                console.log("no creado")
+                res.send({ nombreUsado: true });
+            } else {
+                console.log("creado")
+                res.send(user);
+            }
+        })
 });
 
 app.post('/api/login', function (req, res, next) {
@@ -109,7 +104,6 @@ app.get('/*', checkAuthenticated, function (req, res) {
 });
 
 function checkAuthenticated(req, res, next) {
-    console.log("pasa por acaaaa")
     if (req.isAuthenticated() || req.path == "/login") {
         return next()
     }
